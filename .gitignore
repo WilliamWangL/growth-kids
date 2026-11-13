@@ -1,0 +1,53 @@
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.eslintcache
+.turbo/
+
+# ---- Java / Maven ----
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+
+# ---- Env / Secrets ----
+.env
+.env.local
+.env.*.local
+.env.production
+.env.production.local
+!.env.example
+
+# ---- 生产证书 / 备份（TASK-020：私钥与用户数据不得入库） ----
+docker/nginx/ssl/*
+!docker/nginx/ssl/.gitkeep
+backups/
+
+# ---- Runtime data（仅忽略仓库根与 API 运行目录，避免误伤 photo/storage 源码包）----
+/storage/
+/apps/api/storage/
+logs/
+*.log
+.redis/
+
+# ---- IDE / OS ----
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# ---- Test output ----
+coverage/
+test-results/
+playwright-report/
+
+# ---- Docker volumes ----
+docker/data/

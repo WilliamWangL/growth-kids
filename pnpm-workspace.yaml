@@ -1,0 +1,8 @@
+packages:
+  - apps/web
+  - packages/types
+  - packages/validation
+  - packages/ui
+
+allowBuilds:
+  unrs-resolver: true

@@ -1,0 +1,93 @@
+spring:
+  application:
+    name: growthkids-api
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  jackson:
+    time-zone: UTC
+    default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
+server:
+  port: ${API_PORT:8082}
+
+springdoc:
+  api-docs:
+    path: /api/v1/openapi
+    enabled: true
+  swagger-ui:
+    path: /api/docs
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      # 不使用全局 logic-delete-field：仅 children 等需要的实体单独标注 @TableLogic，
+      # 避免 users.status=disabled 被误当作已删除而不可见。
+
+app:
+  auth:
+    access-token-ttl-seconds: 900
+    refresh-token-ttl-seconds: 2592000
+    issuer: growthkids
+    login-max-attempts-per-email: 10
+    login-max-attempts-per-ip: 30
+    login-attempt-window-seconds: 900
+  cors:
+    allowed-origins:
+      - ${WEB_ORIGIN:http://localhost:3005}
+      - ${NGINX_ORIGIN:http://localhost:8090}
+  user:
+    supported-locales:
+      - en-US
+      - zh-CN
+  who:
+    # 启动时自动导入 WHO LMS 数据（幂等；替换官方数据流程见 data/who/README.md）
+    auto-import: true
+    data-file: ${WHO_DATA_FILE:classpath:who-data/who-standards-example.csv}
+  storage:
+    # 本地磁盘存储目录（相对仓库根或绝对路径）
+    local-path: ${STORAGE_LOCAL_PATH:./storage}
+    public-base-path: /media
+    accel-redirect-enabled: ${STORAGE_ACCEL_REDIRECT:false}
+    # 签名 URL 密钥（生产必须替换为强随机值）与有效期（§120 规则 29）
+    signing-secret: ${STORAGE_SIGNING_SECRET:dev-storage-secret-please-change-me}
+    signed-url-ttl-seconds: ${STORAGE_URL_EXPIRY:600}
+    photo-max-size-bytes: 10485760
+    photo-max-count-per-request: 9
+  membership:
+    free-child-limit: 1
+    free-photo-limit: 100
+    free-timeline-limit: 20
+  payment:
+    # 支付提供商（架构决策 9）：mock 开发可用；paypal/stripe 待真实凭据后接入
+    provider: ${PAYMENT_PROVIDER:mock}
+    # mock webhook 的 HMAC-SHA256 签名密钥（生产必须替换）
+    mock-signing-secret: ${PAYMENT_MOCK_SIGNING_SECRET:dev-payment-secret-please-change-me}
+  features:
+    enable-ai: false
+    enable-report: true
+    enable-donation: true
+    enable-membership: true
+    enable-share: false
+  admin:
+    # TASK-019（§77）：启动时若该邮箱无账户则创建首个 admin；置空则禁用
+    email: ${ADMIN_EMAIL:admin@growthkids.dev}
+    password: ${ADMIN_PASSWORD:Admin123!}

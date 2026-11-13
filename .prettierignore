@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+target/
+coverage/
+storage/
+pnpm-lock.yaml
+AI_DEVELOPMENT_SPEC.md
+README_GrowthKids.md
+data/who/*.csv
+data/who/*.xlsx

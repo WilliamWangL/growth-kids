@@ -1,0 +1,72 @@
+# 生产环境配置（TASK-020，§80-§83）
+# - 结构化 JSON 日志（ECS 格式，§82）；禁止输出密码/token/signed URL
+# - Actuator 仅暴露 health/info（§83 启动探针；metrics 走内网时可另开）
+# - 经 Nginx 反向代理：forward-headers 让 X-Forwarded-For/Proto 生效（审计 IP、签名 URL）
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:mysql}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:growthkids}?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${MYSQL_USER:growthkids}
+    password: ${MYSQL_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+app:
+  auth:
+    # 生产必须由环境变量提供强随机密钥（缺失则启动失败，避免弱默认值）
+    jwt-access-secret: ${JWT_ACCESS_SECRET}
+    jwt-refresh-secret: ${JWT_REFRESH_SECRET}
+  admin:
+    # 生产不提供默认管理员：未配置 ADMIN_EMAIL/ADMIN_PASSWORD 时不创建（§77/§120）
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+
+server:
+  # 容器内固定 8082（与 Dockerfile EXPOSE 对齐）
+  port: 8082
+  shutdown: graceful
+  forward-headers-strategy: framework
+  tomcat:
+    # 反代后获取真实客户端地址（X-Forwarded-For 由 Nginx 追加）
+    remoteip:
+      remote-ip-header: X-Forwarded-For
+      protocol-header: X-Forwarded-Proto
+
+logging:
+  structured:
+    format:
+      console: ecs
+  level:
+    root: INFO
+    com.growthkids: INFO
+    # 生产不输出 SQL 与参数（dev 才开 DEBUG）
+    org.apache.ibatis: WARN
+    com.growthkids.api.who.mapper: INFO
+    com.growthkids.api.user.mapper: INFO
+    com.growthkids.api.child.mapper: INFO
+    com.growthkids.api.growth.mapper: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: true

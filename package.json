@@ -1,0 +1,25 @@
+{
+  "name": "growthkids",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GrowthKids — 儿童成长记录 + 身高预测平台 (monorepo)",
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @growthkids/web dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "format": "prettier --write \"**/*.{ts,tsx,json,yml,yaml,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,yml,yaml,css}\""
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "prettier": "^3.6.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0"
+  }
+}

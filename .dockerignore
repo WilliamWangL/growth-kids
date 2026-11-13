@@ -1,0 +1,21 @@
+# 构建上下文瘦身 + 敏感文件不入镜像（TASK-020）
+.git
+.github
+node_modules
+**/node_modules
+.next
+**/.next
+target
+**/target
+dist
+**/dist
+coverage
+backups
+storage
+logs
+*.log
+.env
+.env.local
+.env.production
+.env.production.local
+docker/nginx/ssl

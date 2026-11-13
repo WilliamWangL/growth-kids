@@ -1,0 +1,8 @@
+# source: it-who-source
+# version: 1.0
+sex,indicator,age_days,l_value,m_value,s_value
+male,height_for_age,0,1.0,50.0,0.04
+male,height_for_age,30,1.0,55.0,0.04
+male,weight_for_age,0,0.5,3.3,0.11
+female,height_for_age,0,1.0,49.0,0.04
+female,height_for_age,30,1.0,54.0,0.04
