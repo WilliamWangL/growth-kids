@@ -18,32 +18,87 @@ Internet ── 80/443 ──> nginx（TLS 终止 / HTTPS 跳转 / 安全头）
 
 - 宿主机仅暴露 `HTTP_PORT`（默认 80）与 `HTTPS_PORT`（默认 443）。
 - 上传/报告文件持久化在命名卷 `storage-data`（挂载到 api 的 `/app/storage`）。
+- WHO 官方 CSV 由宿主 `./data/who-official` 只读挂载到 api 的 `/data/who`，
+  由 `APP_WHO_DATA_FILE` 指向（见 2.2）；未放官方数据时回退镜像内置合成示例。
 
 ## 2. 首次部署
+
+流程：体检 → 准备 WHO 官方数据 → 证书（第 3 节）→ 构建启动 → 清理演示商品。
+
+### 2.1 环境变量与上线体检
 
 ```bash
 # 1) 准备环境变量
 cp .env.production.example .env.production
+chmod 600 .env.production
 #    填写 MYSQL_PASSWORD、MYSQL_ROOT_PASSWORD、JWT_ACCESS_SECRET、
 #    JWT_REFRESH_SECRET、STORAGE_SIGNING_SECRET、PAYMENT_MOCK_SIGNING_SECRET、
-#    NEXT_PUBLIC_API_URL、WEB_ORIGIN、NGINX_ORIGIN、ADMIN_EMAIL/ADMIN_PASSWORD
-#    密钥生成：openssl rand -hex 48
+#    NEXT_PUBLIC_API_URL、WEB_ORIGIN、NGINX_ORIGIN、APP_WHO_DATA_FILE、
+#    ADMIN_EMAIL/ADMIN_PASSWORD；密钥生成：openssl rand -hex 48
 
-# 2) 放置 HTTPS 证书（见第 3 节）
+# 2) 上线体检（存在 FAIL 时不要上线）
+bash scripts/preflight-prod.sh --env-file .env.production
+```
+
+`scripts/preflight-prod.sh` 检查：必填密钥齐全/强度/互不重复、三个站点地址同域且为
+https、证书存在未过期且私钥匹配、WHO 数据非合成、管理员引导、备份目录可写、
+`docker compose config` 可解析、80/443 占用。
+
+只用于内网验收时可临时放行：`--allow-http`、`--allow-synthetic-who`（生产禁用）。
+
+### 2.2 WHO 官方生长标准（生产必填）
+
+镜像内置的 `who-standards-example.csv` 是**合成示例**（`source=growthkids-example-synthetic`），
+用于联调百分位链路；生产必须换成官方数据，否则身高/体重/BMI/头围的百分位与 z-score
+对真实用户不成立。
+
+```bash
+# 官方 CSV（格式与转换见 data/who/README.md）放到宿主目录，无需重建镜像
+# data/who-official/who-standards-official.csv   ← 已被 .gitignore 忽略
+# compose 将 ./data/who-official 只读挂载到容器 /data/who
+# .env.production: APP_WHO_DATA_FILE=file:/data/who/who-standards-official.csv
+```
+
+文件缺失、格式非法或数据级校验失败会**阻止 API 启动**（fail-fast）。若选择把官方数据
+直接打进镜像，则需要重建 API 镜像，并把 `APP_WHO_DATA_FILE` 清空——但 preflight 会把
+`classpath:` 判为失败，避免误用合成数据上线。
+
+### 2.3 构建启动与验证
+
+```bash
+# 3) 放置 HTTPS 证书（见第 3 节）
 #    docker/nginx/ssl/fullchain.pem
 #    docker/nginx/ssl/privkey.pem
 
-# 3) 构建并启动
+# 4) 构建并启动
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
-# 4) 验证
+# 5) 验证
 curl -fsS https://<域名>/api/v1/health          # {"status":"ok"...}
 curl -fsS https://<域名>/actuator/health        # 404（不对外暴露，符合预期）
 docker compose -f docker-compose.prod.yml ps    # api/web 为 healthy
+
+# 6) 运行态复核（健康探针、库内 WHO 来源、演示商品残留、管理员数、存储卷可写）
+bash scripts/preflight-prod.sh --env-file .env.production --post
 ```
 
 首次启动时 Flyway 自动迁移；若 `ADMIN_EMAIL/ADMIN_PASSWORD` 非空且邮箱不存在，
 `AdminBootstrap` 会创建首个管理员（角色 `admin`）。修改角色自下次登录生效。
+
+### 2.4 清理演示商品（首次上线必做）
+
+`V4__seed_deals.sql` 会把 7 条 `purchase_url=https://example.com/deals/*` 的演示商品
+写进数据库。它是 Flyway 迁移而非运行时开关（compose 里已移除无效的
+`ENABLE_DEMO_SEED`），迁移文件也不能回改（checksum 冲突会导致启动失败），
+因此只能按数据清理：
+
+```bash
+bash scripts/clean-demo-data.sh --compose --env-file .env.production          # dry-run 看清单
+bash scripts/clean-demo-data.sh --compose --env-file .env.production --apply  # 执行删除
+```
+
+也可登录 `/admin` →「优惠商品」逐条删除（后台 DELETE 为硬删除）。清理后
+`flyway_schema_history` 中 V4 记录保留，属正常。
 
 > 安全提示：生产环境不要保留 `.env.production` 的空白密钥——API 启动时会因为
 > `${JWT_ACCESS_SECRET}` 等占位符缺失而失败（这是有意的失败即停设计）。
@@ -164,8 +219,10 @@ docker compose -f docker-compose.prod.yml start api
 - [x] HSTS / nosniff / X-Frame-Options / Referrer-Policy
 - [x] 生产密钥无默认值（缺失即启动失败）；首个管理员需显式配置
 - [x] 日志不输出密码/token/signed URL（§82）
+- [x] 上线体检脚本 `scripts/preflight-prod.sh`（密钥/同域/证书/WHO/编排，`--post` 做运行态复核）
+- [x] 演示商品清理脚本 `scripts/clean-demo-data.sh`（V4 种子只清数据、不改迁移）
 - [ ] 真实支付网关（PayPal/Stripe）凭据接入后替换 mock（架构决策 9）
-- [ ] WHO 官方数据替换合成示例（TASK-008 已知限制，上线前必须完成）
+- [ ] WHO 官方数据替换合成示例（TASK-008 已知限制，上线前必须完成；preflight 会拦截未替换状态）
 
 ## 8. 故障排查
 
@@ -175,4 +232,8 @@ docker compose -f docker-compose.prod.yml start api
 | api unhealthy | `docker compose logs api`；确认 MySQL/Redis healthy、密钥环境变量齐全 |
 | 前端 404 / API 跨域 | `NEXT_PUBLIC_API_URL` 必须为完整同域地址（构建期注入，改后需重建 web 镜像） |
 | 备份为空 | 检查 `MYSQL_PASSWORD` 与 mysqldump 权限；脚本会因大小校验直接报错退出 |
+| preflight 报 WHO 合成示例 | 把官方 CSV 放到 `data/who-official/` 并设置 `APP_WHO_DATA_FILE=file:/data/who/<文件名>` |
+| api 启动即退出，日志含 `WHO data file not found` | `APP_WHO_DATA_FILE` 路径与宿主文件不一致（容器内为 `/data/who/*`） |
+| 页面仍显示 example.com 商品 | `bash scripts/clean-demo-data.sh --compose --apply`（dry-run 先看清单） |
+| preflight 报私钥与证书不匹配 | 重新放置配对的 `fullchain.pem` / `privkey.pem` |
 | 8082 端口被其他项目占用（开发机） | 本项目已容器化隔离；开发冒烟可 `--server.port=8092`（见 IMPLEMENTATION_STATUS Known Issues） |

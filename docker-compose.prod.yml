@@ -5,6 +5,8 @@ name: growthkids-prod
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 # 仅 Nginx 暴露 80/443；MySQL/Redis/API/Web 均在内网，不映射宿主机端口。
 # HTTPS 证书放置于 docker/nginx/ssl/{fullchain.pem,privkey.pem}（见 docs/PRODUCTION.md）。
+# 上线前体检：bash scripts/preflight-prod.sh --env-file .env.production
+# 演示商品清理：bash scripts/clean-demo-data.sh --compose --apply（V4 种子为数据而非迁移，只能清数据）
 
 services:
   mysql:
@@ -73,9 +75,14 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://localhost}
       NGINX_ORIGIN: ${NGINX_ORIGIN:-https://localhost}
-      ENABLE_DEMO_SEED: "false"
+      # WHO 生长标准数据源。生产应指向挂载的官方 CSV（file:/data/who/...），
+      # 文件缺失或校验失败会阻止启动（fail-fast，避免带着合成数据对外提供百分位）。
+      # 未设置时回退镜像内置合成示例（source=growthkids-example-synthetic，仅联调可用）。
+      APP_WHO_DATA_FILE: ${APP_WHO_DATA_FILE:-classpath:who-data/who-standards-example.csv}
     volumes:
       - storage-data:/app/storage
+      # 官方 WHO CSV 只读挂载：宿主 ./data/who-official → 容器 /data/who
+      - ./data/who-official:/data/who:ro
     depends_on:
       mysql:
         condition: service_healthy

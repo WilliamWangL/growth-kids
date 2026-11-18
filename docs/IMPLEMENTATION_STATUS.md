@@ -316,8 +316,12 @@
     `logging.structured.format.console=ecs`（每行 JSON）、生产 SQL 日志 WARN、
     graceful shutdown、`forward-headers-strategy=framework`、liveness/readiness probes
   - 生产安全（§120）：`application-prod.yml` 中 JWT/存储/支付密钥无默认值
-    （缺失即启动失败）；首个管理员默认空（不自动创建默认账号）；
-    `ENABLE_DEMO_SEED=false`
+    （缺失即启动失败）；首个管理员默认空（不自动创建默认账号）
+  - 部署缺口补齐：`scripts/preflight-prod.sh`（密钥强度/互不复用、三地址同域且 https、
+    证书未过期且私钥匹配、WHO 非合成、compose 可解析、`--post` 运行态复核）、
+    `scripts/clean-demo-data.sh`（清理 V4 演示商品）；compose 移除空转的
+    `ENABLE_DEMO_SEED`（无代码读取），改为 `APP_WHO_DATA_FILE` +
+    `./data/who-official` 只读挂载以支持官方 WHO CSV
   - Docker（§80）：`apps/api/Dockerfile`（maven:3.9-eclipse-temurin-21 构建 →
     eclipse-temurin:21-jre-jammy 运行，非 root app 用户，curl healthcheck，
     JAVA_OPTS）；`apps/web/Dockerfile`（node:22-alpine 三阶段，复制 Next standalone
@@ -480,7 +484,7 @@
   不再受宿主机端口占用影响。
 - HEIC 图片纯 Java 无法解码缩略图（无成熟纯 Java 解码器），TASK-013 处理策略：接受上传并保留原图，缩略图生成失败时标记 `processing_status=ready` + 原图直出，作为已知限制记录。
 - WHO 官方数据（0-60 月 LMS 表，xlsx 格式）在开发环境无法完整获取（网络受限/WebFetch 大小限制），TASK-008 内置**合成示例数据**（source=growthkids-example-synthetic）跑通全链路。上线前必须按 data/who/README.md 替换为 WHO 官方数据文件（source=bump 为官方版本号），否则 z-score/percentile 不具备医学参考意义。
-- 优惠商品 V4 种子为演示数据（无图片、purchase_url 指向 example.com），上线前需在后台替换为真实商品（含联盟追踪参数）并清理示例行；商品图片直出外部域名，未接 next/image 逐域白名单。
+- 优惠商品 V4 种子为演示数据（无图片、purchase_url 指向 example.com），上线前需在后台替换为真实商品（含联盟追踪参数）并清理示例行：`bash scripts/clean-demo-data.sh --compose --apply`（dry-run 可先预览）；商品图片直出外部域名，未接 next/image 逐域白名单。
 
 ## Next Task
 
@@ -490,6 +494,9 @@
 
 1. 用 WHO 官方 LMS 数据替换合成示例数据（TASK-008 限制，影响医学参考价值）。
 2. 接入真实支付网关（PayPal/Stripe）替换 mock（架构决策 9）。
-3. 生产部署前置：填写 `.env.production` 密钥、放置 HTTPS 证书，
-   按 `docs/PRODUCTION.md` 执行 `docker compose -f docker-compose.prod.yml up -d --build`。
+3. 生产部署前置：填写 `.env.production` 密钥、放置 HTTPS 证书、把官方 WHO CSV 放到
+   `data/who-official/`，先跑 `bash scripts/preflight-prod.sh --env-file .env.production`
+   （0 FAIL 再上线），再按 `docs/PRODUCTION.md` 执行
+   `docker compose -f docker-compose.prod.yml up -d --build`；启动后跑 `--post` 复核，
+   并用 `scripts/clean-demo-data.sh --apply` 清理 V4 演示商品。
 4. 每月执行一次备份恢复演练（§118）。

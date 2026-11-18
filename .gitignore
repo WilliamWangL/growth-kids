@@ -51,3 +51,7 @@ playwright-report/
 
 # ---- Docker volumes ----
 docker/data/
+
+# 官方 WHO 生长标准 CSV（体积大/受许可约束，不入库；目录保留）
+/data/who-official/*
+!/data/who-official/.gitkeep
