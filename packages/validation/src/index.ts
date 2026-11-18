@@ -146,3 +146,88 @@ export const heightPredictionSchema = z.object({
 });
 
 export type HeightPredictionFormValues = z.infer<typeof heightPredictionSchema>;
+
+/** 可选非负数值（后台表单）：空串视为未填，填写时必须为数字且在区间内 */
+function optionalNumber(label: string, min: number, max: number, unit: string) {
+  return z
+    .union([z.literal(''), z.coerce.number()])
+    .optional()
+    .transform((value) => (typeof value === 'number' ? value : undefined))
+    .refine((value) => value === undefined || (value >= min && value <= max), {
+      message: `${label}需在 ${min}-${max}${unit} 之间`,
+    });
+}
+
+/** 折扣金额：最多 2 位小数（与后端 @Digits(integer=8, fraction=2) 对齐） */
+function priceField(label: string, required: boolean) {
+  const base = z.coerce
+    .number({ message: `请输入${label}` })
+    .min(required ? 0.01 : 0, { message: `${label}需大于 ${required ? '0' : '等于 0'}` })
+    .max(99999999, { message: `${label}过大` })
+    .refine((value) => Math.round(value * 100) === Number((value * 100).toFixed(6)), {
+      message: `${label}最多 2 位小数`,
+    });
+  return base;
+}
+
+/** 可选原价：空串视为未填（不传 originalPrice），避免被 coerce 成 0 */
+function optionalPrice(label: string) {
+  return z
+    .union([z.literal(''), z.coerce.number()])
+    .optional()
+    .transform((value) => (typeof value === 'number' ? value : undefined))
+    .refine((value) => value === undefined || (value >= 0 && value <= 99999999), {
+      message: `${label}需在 0-99999999 之间`,
+    })
+    .refine(
+      (value) =>
+        value === undefined || Math.round(value * 100) === Number((value * 100).toFixed(6)),
+      { message: `${label}最多 2 位小数` },
+    );
+}
+
+/**
+ * 后台优惠商品表单（TASK-022）：分类 code 与后端 DealCategory 保持同步；
+ * 跨字段规则（原价≥优惠价、最小月龄≤最大月龄）在 refine 中校验。
+ */
+export const dealFormSchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .min(1, { message: '请输入商品名称' })
+      .max(200, { message: '商品名称最长 200 字' }),
+    brand: z.string().trim().max(100, { message: '品牌最长 100 字' }).optional(),
+    category: z.enum(
+      ['toys', 'books', 'clothing', 'gear', 'nutrition', 'care', 'other'],
+      { message: '请选择分类' },
+    ),
+    minAgeMonths: optionalNumber('最小适用月龄', 0, 216, ' 个月'),
+    maxAgeMonths: optionalNumber('最大适用月龄', 0, 216, ' 个月'),
+    originalPrice: optionalPrice('原价'),
+    dealPrice: priceField('优惠价', true),
+    merchant: z.string().trim().max(100, { message: '商家名称最长 100 字' }).optional(),
+    imageUrl: z.string().trim().max(500, { message: '图片地址最长 500 字' }).optional(),
+    purchaseUrl: z
+      .string()
+      .trim()
+      .min(1, { message: '请输入购买链接' })
+      .max(1000, { message: '链接最长 1000 字' })
+      .regex(/^https?:\/\/.+/, { message: '链接需以 http:// 或 https:// 开头' }),
+    description: z.string().trim().max(4000, { message: '描述最长 4000 字' }).optional(),
+    featured: z.boolean().optional(),
+  })
+  .refine(
+    (values) =>
+      values.originalPrice === undefined || values.originalPrice >= values.dealPrice,
+    { message: '原价不得低于优惠价', path: ['originalPrice'] },
+  )
+  .refine(
+    (values) =>
+      values.minAgeMonths === undefined ||
+      values.maxAgeMonths === undefined ||
+      values.minAgeMonths <= values.maxAgeMonths,
+    { message: '最小适用月龄不得大于最大适用月龄', path: ['maxAgeMonths'] },
+  );
+
+export type DealFormValues = z.infer<typeof dealFormSchema>;

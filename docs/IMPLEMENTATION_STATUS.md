@@ -36,7 +36,7 @@
 
 ## Current Task
 
-（无）—— TASK-001 ~ TASK-020 全部完成
+（无）—— TASK-001 ~ TASK-022 全部完成
 
 ## Completed
 
@@ -369,6 +369,29 @@
     越权 404/未登录 401），API 全套 146 例全绿；`pnpm lint/typecheck/build` 全绿（18 路由）；
     真实进程 curl 冒烟：匿名 estimate 返回 171.2cm（区间 160.7–181.7、13 个年度点）、
     孩子预测返回 180.3cm（区间 173.3–187.3、medium、速度 10.01cm/年）
+- [x] TASK-022 优惠商品（deals）模块（儿童好物优惠目录，规范 §139 变现方向）：
+  - 定位：只做「优惠信息整理 + 站外跳转」，不做站内下单/库存/支付，不接入 payment 模块；
+    购买与售后由商家承担，详情页明示该边界
+  - 数据：Flyway V3 建 `deals`（标题/品牌/分类/适用月龄区间/原价/优惠价/币种/商家/图片/
+    购买链接/描述/status/featured/投放窗口 starts_at-ends_at，含索引与 CHECK 约束）；
+    V4 种子 7 件示例商品（purchase_url 为 example.com 占位，上线前 DELETE 清理）
+  - 后端：新增 `deal` 包 —— 公开 `GET /api/v1/deals`（分页 + category/ageMonths/q 过滤，
+    只返回 active 且在投放窗口内的商品）、`GET /api/v1/deals/{id}`（不可见统一 404
+    DEAL_NOT_FOUND，§70 隐藏存在性）、`GET /api/v1/deals/categories`（分类 code/label
+    单一事实源）；后台 `/api/v1/admin/deals` GET/POST/PATCH/DELETE（ADMIN 双保险，
+    PATCH 为缺省不变语义）；DealCategory 枚举统一 code/label 与校验正则，
+    DealResponse 服务端计算 discountPercent
+  - 前端：`/deals` 公开列表（分类 chips + 年龄下拉 + 分页，未登录可看）、`/deals/[id]` 详情
+    （价格/折扣/适用年龄/描述 + 站外购买按钮 + 「价格库存以商家为准」声明）；
+    首页访客 CTA「育儿好物优惠」与 dashboard「好物优惠」入口卡；`/admin` 新增
+    「优惠商品」tab（状态过滤 + 新建/编辑表单 + 上架下架 + 两段式删除）
+  - 共享包：types 补 Deal/DealCategoryOption；validation 补 dealFormSchema
+    （分类枚举、价格 2 位小数、原价≥优惠价、月龄区间、http(s) 链接）
+  - 验证通过：DealControllerIntegrationTest 8 例（公开可见性窗口/分类+月龄+关键词过滤/
+    非法分类与月龄 400/不可见详情 404/分类选项/ADMIN 401+403/CRUD 与下架联动/非法载荷）；
+    API 全套 154 例全绿；`pnpm lint/typecheck/build` 全绿（19 路由，/deals 静态预渲染）；
+    真实进程冒烟：列表 7 件、ageMonths=24 → 5 件、category=books → 1 件、匿名 admin 401；
+    `scripts/deal-smoke.sh` 17 项全 PASS（公开读取/权限门禁/CRUD/上下架/非法载荷）
 
 ## In Progress
 
@@ -383,7 +406,7 @@
 - [x] lint（TASK-001）
 - [x] typecheck（TASK-001）
 - [x] unit（TASK-004：PasswordHasherTest、JwtServiceTest；TASK-007：AgeCalculatorTest 6 例、BmiCalculatorTest 5 例；TASK-008：WhoCsvParserTest 10 例、WhoDataValidatorTest 8 例；TASK-009：LmsCalculatorTest 6 例；TASK-010：MidParentalHeightCalculatorTest 5 例、GrowthVelocityCalculatorTest 8 例、HeightPredictionEngineTest 7 例；TASK-013：StorageSignerTest 6 例）
-- [x] integration（TASK-004 Auth 12 例；TASK-005 User 7 例；TASK-006 Child 8 例；TASK-007/009 Growth Record 15 例；TASK-008 WHO Importer 4 例；TASK-011 Dashboard 4 例；TASK-012 Growth Chart 4 例；TASK-013 Photo 10 例；TASK-014 Timeline 5 例；TASK-015 Memory 8 例；TASK-016 Membership 9 例；TASK-017 Donation 5 例；TASK-018 Annual Report 5 例；TASK-019 Admin 7 例）；测试清理统一走 IntegrationTestCleaner（按 FK 顺序 + webhook_logs + audit_logs）；API 全套 137 例全绿
+- [x] integration（TASK-004 Auth 12 例；TASK-005 User 7 例；TASK-006 Child 8 例；TASK-007/009 Growth Record 15 例；TASK-008 WHO Importer 4 例；TASK-011 Dashboard 4 例；TASK-012 Growth Chart 4 例；TASK-013 Photo 10 例；TASK-014 Timeline 5 例；TASK-015 Memory 8 例；TASK-016 Membership 9 例；TASK-017 Donation 5 例；TASK-018 Annual Report 5 例；TASK-019 Admin 7 例；TASK-022 Deal 8 例）；测试清理统一走 IntegrationTestCleaner（按 FK 顺序 + webhook_logs + audit_logs + deals）；API 全套 154 例全绿
 - [x] build（TASK-001：pnpm build / mvn install；TASK-020：Next standalone 产物、
   api/web Docker 镜像、docker compose config、nginx -t）
 
@@ -394,7 +417,7 @@
 
 ## Database Migration
 
-- [x] V1 核心表 / V2 套餐种子（TASK-003）
+- [x] V1 核心表 / V2 套餐种子（TASK-003）；V3 deals 表 / V4 优惠商品种子（TASK-022）
 
 ## API
 
@@ -421,6 +444,8 @@
   仅容器内网；对外由 Nginx 404）
 - [x] /api/v1/prediction/estimate（公开，无需登录）、
   /api/v1/children/:childId/prediction（TASK-021，§44/§75）
+- [x] /api/v1/deals（公开列表，category/ageMonths/q 过滤）、/api/v1/deals/categories、
+  /api/v1/deals/{id}（TASK-022）；后台 /api/v1/admin/deals（GET/POST/PATCH/DELETE，仅 ADMIN）
 
 ## Frontend
 
@@ -441,6 +466,8 @@
   以 node runner 运行（TASK-020）
 - [x] 页面：/height-prediction 公开免费预测（表单 + 结果 + 逐年折线 + §45 免责声明，
   无需登录）、/children/[id]/prediction 孩子档案预测 + 首页 CTA 与 dashboard 入口卡（TASK-021）
+- [x] 页面：/deals 公开优惠列表（分类/年龄筛选 + 分页）、/deals/[id] 详情（站外购买）；
+  首页访客 CTA 与 dashboard 入口卡；/admin 新增「优惠商品」tab（CRUD + 上下架）（TASK-022）
 
 ## Known Issues
 
@@ -453,10 +480,11 @@
   不再受宿主机端口占用影响。
 - HEIC 图片纯 Java 无法解码缩略图（无成熟纯 Java 解码器），TASK-013 处理策略：接受上传并保留原图，缩略图生成失败时标记 `processing_status=ready` + 原图直出，作为已知限制记录。
 - WHO 官方数据（0-60 月 LMS 表，xlsx 格式）在开发环境无法完整获取（网络受限/WebFetch 大小限制），TASK-008 内置**合成示例数据**（source=growthkids-example-synthetic）跑通全链路。上线前必须按 data/who/README.md 替换为 WHO 官方数据文件（source=bump 为官方版本号），否则 z-score/percentile 不具备医学参考意义。
+- 优惠商品 V4 种子为演示数据（无图片、purchase_url 指向 example.com），上线前需在后台替换为真实商品（含联盟追踪参数）并清理示例行；商品图片直出外部域名，未接 next/image 逐域白名单。
 
 ## Next Task
 
-（无）—— TASK-001 ~ TASK-020 全部完成。
+（无）—— TASK-001 ~ TASK-022 全部完成。
 
 上线前遗留（均已在 Known Issues / docs/PRODUCTION.md 标注）：
 

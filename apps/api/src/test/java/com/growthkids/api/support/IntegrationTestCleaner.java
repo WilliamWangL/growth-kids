@@ -11,9 +11,10 @@ public final class IntegrationTestCleaner {
     private IntegrationTestCleaner() {}
 
     private static final String[] STATEMENTS = {
-        // 无用户外键的审计表（TASK-016 webhook 测试写入；TASK-019 admin 审计）
+        // 无用户外键的审计表（TASK-016 webhook 测试写入；TASK-019 admin 审计；TASK-022 优惠商品）
         "DELETE FROM webhook_logs",
         "DELETE FROM audit_logs",
+        "DELETE FROM deals",
         // 依赖 children 的表
         "DELETE gp FROM growth_photos gp JOIN children c ON gp.child_id = c.id"
                 + " JOIN users u ON c.user_id = u.id WHERE u.email LIKE 'it-%'",

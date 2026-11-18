@@ -29,7 +29,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * 安全配置（规范 §71）：无状态 JWT 认证、CORS、统一 401/403 JSON。
  *
  * <p>公开端点：注册/登录/刷新/登出（§24-§27）、健康检查、OpenAPI、
- * 公开身高计算（§75）、照片签名 URL（§46 由 token 自校验）、
+ * 公开身高计算（§75）、优惠商品目录（TASK-022 营销展示）、照片签名 URL（§46 由 token 自校验）、
  * 套餐列表（§64 营销展示）与支付 webhook（§67 签名自校验）。
  */
 @Configuration
@@ -62,6 +62,8 @@ public class SecurityConfig {
                                         .requestMatchers(HttpMethod.PUT, "/api/v1/media/upload")
                                         .permitAll()
                                         .requestMatchers(HttpMethod.GET, "/api/v1/membership/plans")
+                                        .permitAll()
+                                        .requestMatchers(HttpMethod.GET, "/api/v1/deals", "/api/v1/deals/**")
                                         .permitAll()
                                         .requestMatchers(
                                                 "/api/v1/health",

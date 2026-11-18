@@ -2,21 +2,25 @@
 
 /**
  * 后台管理页（TASK-019，规范 §77/§110）：仅 admin 可访问。
- * 顶部 tab：总览（平台统计）/ 用户（角色管理）/ 孩子 / 支付 / 日志。
+ * 顶部 tab：总览（平台统计）/ 用户（角色管理）/ 孩子 / 支付 / 优惠商品 / 日志。
  * 非登录与无权限分别给出引导；后端对 /api/v1/admin/** 做 ADMIN 双重校验。
  */
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import type {
   AdminChild,
   AdminDashboard,
   AdminLog,
   AdminPayment,
   AdminUser,
+  Deal,
+  DealCategoryOption,
   Paginated,
   UserProfile,
 } from '@growthkids/types';
+import { dealFormSchema } from '@growthkids/validation';
 import { apiFetch, errorMessage } from '@/lib/api';
 import { loadSession } from '@/lib/session';
 
@@ -29,13 +33,14 @@ type AdminState =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; dashboard: AdminDashboard };
 
-type Tab = 'dashboard' | 'users' | 'children' | 'payments' | 'logs';
+type Tab = 'dashboard' | 'users' | 'children' | 'payments' | 'deals' | 'logs';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'dashboard', label: '总览' },
   { key: 'users', label: '用户' },
   { key: 'children', label: '孩子' },
   { key: 'payments', label: '支付' },
+  { key: 'deals', label: '优惠商品' },
   { key: 'logs', label: '日志' },
 ];
 
@@ -623,6 +628,477 @@ function LogsTab() {
   );
 }
 
+// ===== 优惠商品（TASK-022 后台 CRUD） =====
+
+const dealInputClass =
+  'w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-indigo-300 focus:outline-none';
+
+/** 分类接口异常时的兜底（与后端 DealCategory 保持同步） */
+const FALLBACK_DEAL_CATEGORIES: DealCategoryOption[] = [
+  { code: 'toys', label: '玩具' },
+  { code: 'books', label: '绘本' },
+  { code: 'clothing', label: '童装' },
+  { code: 'gear', label: '出行装备' },
+  { code: 'nutrition', label: '营养' },
+  { code: 'care', label: '洗护' },
+  { code: 'other', label: '其他' },
+];
+
+interface DealFormState {
+  title: string;
+  brand: string;
+  category: string;
+  minAgeMonths: string;
+  maxAgeMonths: string;
+  originalPrice: string;
+  dealPrice: string;
+  merchant: string;
+  imageUrl: string;
+  purchaseUrl: string;
+  description: string;
+  featured: boolean;
+  status: string;
+}
+
+function emptyDealForm(): DealFormState {
+  return {
+    title: '',
+    brand: '',
+    category: 'toys',
+    minAgeMonths: '',
+    maxAgeMonths: '',
+    originalPrice: '',
+    dealPrice: '',
+    merchant: '',
+    imageUrl: '',
+    purchaseUrl: '',
+    description: '',
+    featured: false,
+    status: 'active',
+  };
+}
+
+function dealToForm(deal: Deal): DealFormState {
+  const text = (value: number | undefined) => (value == null ? '' : String(value));
+  return {
+    title: deal.title,
+    brand: deal.brand ?? '',
+    category: deal.category,
+    minAgeMonths: text(deal.minAgeMonths),
+    maxAgeMonths: text(deal.maxAgeMonths),
+    originalPrice: text(deal.originalPrice),
+    dealPrice: text(deal.dealPrice),
+    merchant: deal.merchant ?? '',
+    imageUrl: deal.imageUrl ?? '',
+    purchaseUrl: deal.purchaseUrl,
+    description: deal.description ?? '',
+    featured: deal.featured,
+    status: deal.status,
+  };
+}
+
+function DealField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block text-xs text-slate-500">
+      <span>{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+function DealFormPanel({
+  deal,
+  categories,
+  onSaved,
+  onCancel,
+}: {
+  deal: Deal | null;
+  categories: DealCategoryOption[];
+  onSaved: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<DealFormState>(deal ? dealToForm(deal) : emptyDealForm());
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function update<K extends keyof DealFormState>(key: K, value: DealFormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function submit() {
+    const parsed = dealFormSchema.safeParse(form);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? '请检查表单');
+      return;
+    }
+    const values = parsed.data;
+    const body = {
+      title: values.title,
+      brand: values.brand || undefined,
+      category: values.category,
+      minAgeMonths: values.minAgeMonths,
+      maxAgeMonths: values.maxAgeMonths,
+      originalPrice: values.originalPrice,
+      dealPrice: values.dealPrice,
+      merchant: values.merchant || undefined,
+      imageUrl: values.imageUrl || undefined,
+      purchaseUrl: values.purchaseUrl,
+      description: values.description || undefined,
+      featured: values.featured ?? false,
+      // 新建时后端默认 active；编辑时允许上下架
+      ...(deal ? { status: form.status } : {}),
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      if (deal) {
+        await apiFetch<Deal>(`/api/v1/admin/deals/${deal.id}`, { method: 'PATCH', body });
+      } else {
+        await apiFetch<Deal>('/api/v1/admin/deals', { method: 'POST', body });
+      }
+      onSaved(deal ? '已更新商品' : '已新建商品');
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+    setBusy(false);
+  }
+
+  return (
+    <form
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        void submit();
+      }}
+      className="space-y-3 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm"
+    >
+      <p className="text-sm font-semibold text-slate-900">
+        {deal ? `编辑：${deal.title}` : '新建优惠商品'}
+      </p>
+      <DealField label="商品名称">
+        <input
+          className={dealInputClass}
+          value={form.title}
+          onChange={(event) => update('title', event.target.value)}
+        />
+      </DealField>
+      <div className="grid grid-cols-2 gap-2">
+        <DealField label="品牌">
+          <input
+            className={dealInputClass}
+            value={form.brand}
+            onChange={(event) => update('brand', event.target.value)}
+          />
+        </DealField>
+        <DealField label="分类">
+          <select
+            className={dealInputClass}
+            value={form.category}
+            onChange={(event) => update('category', event.target.value)}
+          >
+            {categories.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </DealField>
+        <DealField label="最小月龄">
+          <input
+            inputMode="numeric"
+            className={dealInputClass}
+            value={form.minAgeMonths}
+            onChange={(event) => update('minAgeMonths', event.target.value)}
+          />
+        </DealField>
+        <DealField label="最大月龄">
+          <input
+            inputMode="numeric"
+            className={dealInputClass}
+            value={form.maxAgeMonths}
+            onChange={(event) => update('maxAgeMonths', event.target.value)}
+          />
+        </DealField>
+        <DealField label="原价（USD，可空）">
+          <input
+            inputMode="decimal"
+            className={dealInputClass}
+            value={form.originalPrice}
+            onChange={(event) => update('originalPrice', event.target.value)}
+          />
+        </DealField>
+        <DealField label="优惠价（USD）">
+          <input
+            inputMode="decimal"
+            className={dealInputClass}
+            value={form.dealPrice}
+            onChange={(event) => update('dealPrice', event.target.value)}
+          />
+        </DealField>
+        <DealField label="商家">
+          <input
+            className={dealInputClass}
+            value={form.merchant}
+            onChange={(event) => update('merchant', event.target.value)}
+          />
+        </DealField>
+        <DealField label="图片地址">
+          <input
+            className={dealInputClass}
+            value={form.imageUrl}
+            onChange={(event) => update('imageUrl', event.target.value)}
+          />
+        </DealField>
+      </div>
+      <DealField label="购买链接（http/https）">
+        <input
+          className={dealInputClass}
+          value={form.purchaseUrl}
+          onChange={(event) => update('purchaseUrl', event.target.value)}
+        />
+      </DealField>
+      <DealField label="商品描述">
+        <textarea
+          rows={3}
+          className={dealInputClass}
+          value={form.description}
+          onChange={(event) => update('description', event.target.value)}
+        />
+      </DealField>
+      <div className="flex items-center gap-4 text-xs text-slate-600">
+        <label className="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={form.featured}
+            onChange={(event) => update('featured', event.target.checked)}
+          />
+          置顶展示
+        </label>
+        {deal && (
+          <label className="flex items-center gap-1.5">
+            状态
+            <select
+              className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+              value={form.status}
+              onChange={(event) => update('status', event.target.value)}
+            >
+              <option value="active">在售</option>
+              <option value="inactive">下架</option>
+            </select>
+          </label>
+        )}
+      </div>
+      {error && <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="flex-1 rounded-xl bg-indigo-500 py-2 text-xs font-semibold text-white transition hover:bg-indigo-600 disabled:opacity-50"
+        >
+          {busy ? '保存中…' : '保存'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 rounded-xl border border-slate-200 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300"
+        >
+          取消
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function DealsTab() {
+  const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const [version, setVersion] = useState(0);
+  const [data, setData] = useState<Paginated<Deal> | null>(null);
+  const [categories, setCategories] = useState<DealCategoryOption[]>(FALLBACK_DEAL_CATEGORIES);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Deal | 'new' | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  useEffect(() => {
+    void apiFetch<DealCategoryOption[]>('/api/v1/deals/categories', { auth: false })
+      .then((items) => {
+        if (items.length > 0) {
+          setCategories(items);
+        }
+      })
+      // 分类接口异常时保留兜底选项，不阻塞表单
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const query = `page=${page}&pageSize=${PAGE_SIZE}${status ? `&status=${status}` : ''}`;
+    void fetchPage<Paginated<Deal>>(`/api/v1/admin/deals?${query}`).then((result) => {
+      if (result.data) {
+        setData(result.data);
+        setError(null);
+      } else {
+        setError(result.message ?? '加载失败');
+      }
+    });
+  }, [page, status, version]);
+
+  function handleSaved(message: string) {
+    setEditing(null);
+    setNotice(message);
+    setVersion((value) => value + 1);
+  }
+
+  async function toggleStatus(deal: Deal) {
+    setBusyId(deal.id);
+    setNotice(null);
+    try {
+      const next = deal.status === 'active' ? 'inactive' : 'active';
+      await apiFetch<Deal>(`/api/v1/admin/deals/${deal.id}`, {
+        method: 'PATCH',
+        body: { status: next },
+      });
+      setNotice(next === 'active' ? '已上架' : '已下架');
+      setVersion((value) => value + 1);
+    } catch (err) {
+      setNotice(errorMessage(err));
+    }
+    setBusyId(null);
+  }
+
+  async function remove(deal: Deal) {
+    // 两段式确认：第一次点击变为「确认删除」，避免误删
+    if (confirmId !== deal.id) {
+      setConfirmId(deal.id);
+      return;
+    }
+    setBusyId(deal.id);
+    setConfirmId(null);
+    setNotice(null);
+    try {
+      await apiFetch<void>(`/api/v1/admin/deals/${deal.id}`, { method: 'DELETE' });
+      setNotice('已删除商品');
+      setVersion((value) => value + 1);
+    } catch (err) {
+      setNotice(errorMessage(err));
+    }
+    setBusyId(null);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <select
+          value={status}
+          onChange={(event) => {
+            setStatus(event.target.value);
+            setPage(1);
+          }}
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600"
+        >
+          <option value="">全部状态</option>
+          <option value="active">在售</option>
+          <option value="inactive">已下架</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => setEditing('new')}
+          className="rounded-xl bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-600"
+        >
+          + 新建商品
+        </button>
+      </div>
+
+      {notice && (
+        <p className="rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-600">{notice}</p>
+      )}
+      {error && <LoadError message={error} />}
+
+      {editing && (
+        <DealFormPanel
+          // 切换编辑对象时重建表单状态
+          key={editing === 'new' ? 'new' : editing.id}
+          deal={editing === 'new' ? null : editing}
+          categories={categories}
+          onSaved={handleSaved}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {data &&
+        (data.items.length === 0 ? (
+          <p className="rounded-2xl border border-slate-100 bg-white px-4 py-6 text-center text-xs text-slate-400">
+            暂无商品，点击「新建商品」添加
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {data.items.map((deal) => (
+              <li
+                key={deal.id}
+                className="space-y-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{deal.title}</p>
+                    <p className="truncate text-xs text-slate-400">
+                      {deal.categoryLabel} · {formatMoney(deal.dealPrice, deal.currency)}
+                      {deal.originalPrice != null &&
+                        ` / 原价 ${formatMoney(deal.originalPrice, deal.currency)}`}
+                      {deal.merchant ? ` · ${deal.merchant}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    {deal.featured && <Badge label="置顶" tone="indigo" />}
+                    {deal.status === 'active' ? (
+                      <Badge label="在售" tone="green" />
+                    ) : (
+                      <Badge label="已下架" tone="gray" />
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
+                  <span>更新 {formatDateTime(deal.updatedAt)}</span>
+                  <span className="flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(deal)}
+                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === deal.id}
+                      onClick={() => void toggleStatus(deal)}
+                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50"
+                    >
+                      {deal.status === 'active' ? '下架' : '上架'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === deal.id}
+                      onClick={() => void remove(deal)}
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition disabled:opacity-50 ${
+                        confirmId === deal.id
+                          ? 'border-rose-300 bg-rose-50 text-rose-600'
+                          : 'border-slate-200 text-slate-600 hover:border-rose-300 hover:text-rose-600'
+                      }`}
+                    >
+                      {confirmId === deal.id ? '确认删除' : '删除'}
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ))}
+      {data && data.pagination.totalPages > 1 && (
+        <Pager page={page} totalPages={data.pagination.totalPages} onChange={setPage} />
+      )}
+    </div>
+  );
+}
+
 // ===== 页面骨架 =====
 
 function AdminView({ dashboard }: { dashboard: AdminDashboard }) {
@@ -660,6 +1136,7 @@ function AdminView({ dashboard }: { dashboard: AdminDashboard }) {
       {tab === 'users' && <UsersTab />}
       {tab === 'children' && <ChildrenTab />}
       {tab === 'payments' && <PaymentsTab />}
+      {tab === 'deals' && <DealsTab />}
       {tab === 'logs' && <LogsTab />}
     </div>
   );

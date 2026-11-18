@@ -122,6 +122,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   REPORT_NOT_READY: '报告还在生成中，请稍候再下载',
   GROWTH_RECORD_DUPLICATE_DATE: '这一天已有成长记录，请更换日期',
   PREDICTION_INSUFFICIENT_DATA: '身高数据不足，先记录一次身高再试',
+  DEAL_NOT_FOUND: '该优惠已下架或不存在',
+  DEAL_INVALID_DATA: '商品数据不合法，请检查价格与适用年龄区间',
   USER_NOT_FOUND: '用户不存在或已被删除',
 };
 

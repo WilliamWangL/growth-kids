@@ -196,6 +196,40 @@ export interface HeightPrediction {
   yearlyPredictions: YearlyHeightPrediction[];
 }
 
+/** 优惠商品分类选项（TASK-022）：公开端点下发，前端不硬编码分类表 */
+export interface DealCategoryOption {
+  code: string;
+  label: string;
+}
+
+/**
+ * 优惠商品（TASK-022）：纯展示型目录，purchaseUrl 指向商家站外页面；
+ * discountPercent 由服务端计算（缺原价时省略）
+ */
+export interface Deal {
+  id: number;
+  title: string;
+  brand?: string;
+  category: string;
+  categoryLabel?: string;
+  minAgeMonths?: number;
+  maxAgeMonths?: number;
+  originalPrice?: number;
+  dealPrice: number;
+  discountPercent?: number;
+  currency: string;
+  merchant?: string;
+  imageUrl?: string;
+  purchaseUrl: string;
+  description?: string;
+  featured: boolean;
+  status: 'active' | 'inactive';
+  startsAt?: string;
+  endsAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 成长照片（TASK-013，§15/§47）：缩略图未生成（处理中/HEIC）时 thumbnailUrl 省略 */
 export interface Photo {
   id: number;

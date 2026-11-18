@@ -64,6 +64,10 @@ public enum ApiErrorCode {
     REPORT_NO_DATA(HttpStatus.BAD_REQUEST, "No growth records in the requested year"),
     REPORT_NOT_READY(HttpStatus.CONFLICT, "Report is not ready yet"),
 
+    // ---- Deal（TASK-022，公开优惠商品目录） ----
+    DEAL_NOT_FOUND(HttpStatus.NOT_FOUND, "Deal not found"),
+    DEAL_INVALID_DATA(HttpStatus.BAD_REQUEST, "Invalid deal data"),
+
     // ---- Generic ----
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "Validation failed"),
     BAD_REQUEST(HttpStatus.BAD_REQUEST, "Bad request"),

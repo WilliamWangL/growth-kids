@@ -115,6 +115,12 @@ function GuestHome() {
           >
             免费预测身高
           </Link>
+          <Link
+            href="/deals"
+            className="block w-full rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+          >
+            育儿好物优惠
+          </Link>
         </div>
       </section>
     </div>
@@ -198,6 +204,16 @@ function DashboardView({
           <div>
             <p className="text-sm font-medium text-slate-700">身高预测</p>
             <p className="text-xs text-slate-400">估算成年身高、区间与逐年趋势</p>
+          </div>
+          <span className="shrink-0 text-sm text-indigo-500">查看 →</span>
+        </Link>
+        <Link
+          href="/deals"
+          className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-3.5 shadow-sm transition hover:border-indigo-200"
+        >
+          <div>
+            <p className="text-sm font-medium text-slate-700">好物优惠</p>
+            <p className="text-xs text-slate-400">按年龄挑选玩具、绘本与用品</p>
           </div>
           <span className="shrink-0 text-sm text-indigo-500">查看 →</span>
         </Link>
